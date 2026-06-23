@@ -1,3 +1,5 @@
+import * as XLSX from 'xlsx';
+window.XLSX = XLSX;
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
