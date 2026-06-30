@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-
+import { SitePill } from "./components/ui/Pill"
 /* ─── PALETTE ─── */
 const C = {
   navy: "#0A1628", navyMid: "#112240", navyLight: "#1A3560",
