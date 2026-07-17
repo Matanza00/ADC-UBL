@@ -6,6 +6,7 @@ import { matchSubProduct } from "../../utils/irisEngine";
 import { Card } from "../ui/Card";
 import { Pill, SitePill } from "../ui/Pill";
 import SharedSyncBanner from "../layout/SharedSyncBanner";
+import axios from "axios";
 
 const SCHEME_COLS = { "VISA": "#1A56DB", "MASTERCARD": "#9E1B1B", "PAYPAK": "#065F46", "UNION PAY": "#5B21B6", "STANDARD": "#334155" };
 
@@ -14,34 +15,55 @@ export default function BalancesTab({ closing, setClosing, toast, showAlert, ent
   const [importLoading, setImportLoading] = useState(false);
   const [selInvType,    setSelInvType]    = useState("PLASTIC");
 
-  useEffect(() => {
-  setLocal(prev => ({ ...closing, ...prev }));
-}, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // NEW — fetch from DB on mount instead of trusting the in-memory prop
+useEffect(() => {
+  const fetchClosing = async () => {
+    try {
+      const res = await axios.get("http://localhost:5000/api/closing-balances");
+      setLocal(res.data);
+      setClosing(res.data);
+    } catch (err) {
+      console.error("Failed to fetch closing balances:", err.message);
+    }
+  };
+  fetchClosing();
+}, []);
 
   const update  = (key, val) => setLocal(p => ({ ...p, [key]: { ...(p[key] || {}), value: parseInt(val) || 0 } }));
 
-  const saveAll = () => {
-  const now  = new Date().toISOString();
-  const next = { ...closing }; // preserve all existing keys from other invTypes
+  // NEW
+const saveAll = async () => {
+  const now = new Date().toISOString();
+  const next = { ...closing };
+  const toPersist = [];
   for (const k in local) {
-    // only save keys that belong to the currently selected invType
     if (k.startsWith(selInvType + "|")) {
       next[k] = { ...local[k], updatedAt: now, date: "manual", updatedBy: currentSite };
+      toPersist.push({ balanceKey: k, value: next[k].value, entryDate: "manual", updatedBy: currentSite });
     }
   }
-  setClosing(next);
-  toast("Shared balances saved.", "success");
+  try {
+    await Promise.all(toPersist.map(p => axios.post("http://localhost:5000/api/closing-balances", p)));
+    setClosing(next);
+    toast("Shared balances saved.", "success");
+  } catch (err) {
+    toast("Save failed: " + err.message, "error");
+  }
 };
-
-  const resetAll = () => {
+const resetAll = async () => {
   if (!window.confirm(`Reset all ${selInvType} balances to zero?`)) return;
-  const nextClosing = { ...closing };
-  const nextLocal   = { ...local };
-  Object.keys(nextClosing).forEach(k => { if (k.startsWith(selInvType + "|")) delete nextClosing[k]; });
-  Object.keys(nextLocal).forEach(k =>   { if (k.startsWith(selInvType + "|")) delete nextLocal[k]; });
-  setClosing(nextClosing);
-  setLocal(nextLocal);
-  toast(`${selInvType} balances reset.`, "info");
+  try {
+    await axios.delete(`http://localhost:5000/api/closing-balances?prefix=${selInvType}|`);
+    const nextClosing = { ...closing };
+    const nextLocal   = { ...local };
+    Object.keys(nextClosing).forEach(k => { if (k.startsWith(selInvType + "|")) delete nextClosing[k]; });
+    Object.keys(nextLocal).forEach(k =>   { if (k.startsWith(selInvType + "|")) delete nextLocal[k]; });
+    setClosing(nextClosing);
+    setLocal(nextLocal);
+    toast(`${selInvType} balances reset.`, "info");
+  } catch (err) {
+    toast("Reset failed: " + err.message, "error");
+  }
 };
   const handleImport = async (e) => {
     const file = e.target.files[0]; if (!file) return;

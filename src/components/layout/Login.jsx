@@ -1,45 +1,70 @@
 // src/components/layout/Login.jsx
 import { useState } from "react";
+import { 
+  User, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  AlertCircle, 
+  ArrowLeft, 
+  ArrowRight,
+  Building2, 
+  Landmark,
+  Layers,
+  Truck,
+  TrendingUp,
+  Activity
+} from "lucide-react";
 import { SITE_USERS } from "../../constants/catalog";
 import ublLogo from "../../assets/ubl logo.png";
 
 const SITE_CFG = {
   KHI: {
-    emoji: "🏙️",
     city: "Karachi",
     gradient: "linear-gradient(135deg, #1D4ED8 0%, #1e3a5f 100%)",
     accent: "#1D4ED8",
     accentLight: "#EFF6FF",
     accentBorder: "#BFDBFE",
     tag: "Head Office",
+    icon: Building2,
   },
   LHE: {
-    emoji: "🌆",
     city: "Lahore",
     gradient: "linear-gradient(135deg, #7C3AED 0%, #4C1D95 100%)",
     accent: "#7C3AED",
     accentLight: "#F5F3FF",
     accentBorder: "#DDD6FE",
     tag: "Branch Office",
+    icon: Landmark,
   },
 };
 
 export default function Login({ onLogin }) {
   const [step, setStep] = useState(1);
-  const [sel,  setSel]  = useState("");
+  const [sel, setSel] = useState("");
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
-  const [err,  setErr]  = useState("");
+  const [err, setErr] = useState("");
   const [showPass, setShowPass] = useState(false);
 
   const attempt = () => {
-    if (!user.trim() || !pass.trim()) { setErr("Please enter both username and password."); return; }
+    if (!user.trim() || !pass.trim()) { 
+      setErr("Please enter both username and password."); 
+      return; 
+    }
     const cfg = SITE_USERS[sel];
-    if (user !== cfg.username || pass !== cfg.password) { setErr("Incorrect credentials. Please try again."); setPass(""); return; }
-    setErr(""); onLogin(sel);
+    if (user !== cfg.username || pass !== cfg.password) { 
+      setErr("Incorrect credentials. Please try again."); 
+      setPass(""); 
+      return; 
+    }
+    setErr(""); 
+    onLogin(sel);
   };
 
   const selCfg = sel ? SITE_CFG[sel] : null;
+  // Dynamic component instantiation wrapper
+  const SelectedIcon = selCfg ? selCfg.icon : null;
 
   return (
     <div style={{
@@ -56,26 +81,26 @@ export default function Login({ onLogin }) {
         <div style={{ position: "absolute", top: -120, right: -120, width: 480, height: 480, borderRadius: "50%", background: "radial-gradient(circle, #EFF6FF 0%, transparent 70%)", opacity: .9 }} />
         <div style={{ position: "absolute", bottom: -80, left: -80, width: 360, height: 360, borderRadius: "50%", background: "radial-gradient(circle, #F5F3FF 0%, transparent 70%)", opacity: .8 }} />
         <div style={{ position: "absolute", top: "40%", left: "30%", width: 200, height: 200, borderRadius: "50%", background: "radial-gradient(circle, #F0FDF4 0%, transparent 70%)", opacity: .6 }} />
-        {/* subtle grid */}
         <div style={{
           position: "absolute", inset: 0,
-          backgroundImage: "linear-gradient(rgba(0,0,0,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.03) 1px, transparent 1px)",
+          backgroundImage: "linear-gradient(rgba(0,0,0,.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.02) 1px, transparent 1px)",
           backgroundSize: "40px 40px",
         }} />
       </div>
 
       {/* ── main container ── */}
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px", position: "relative", zIndex: 1 }}>
-        <div style={{ width: "100%", maxWidth: step === 1 ? 480 : 960, display: "grid", gridTemplateColumns: step === 1 ? "1fr" : "1fr 1fr", gap: 32, alignItems: "center", transition: "all .3s ease" }}>
+        <div style={{ width: "100%", maxWidth: step === 1 ? 480 : 960, display: "grid", gridTemplateColumns: step === 1 ? "1fr" : "1fr 1fr", gap: 48, alignItems: "center", transition: "all .3s ease" }}>
 
           {/* ── LEFT: branding panel ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 32, alignItems: step === 1 ? "center" : "flex-start", textAlign: step === 1 ? "center" : "left" }}>
+            
             {/* logo + wordmark */}
             <div style={{ display: "flex", alignItems: "center", gap: 14, justifyContent: step === 1 ? "center" : "flex-start" }}>
               <div style={{
                 width: 52, height: 52, borderRadius: 14,
                 background: "#fff",
-                boxShadow: "0 4px 20px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.04)",
+                boxShadow: "0 4px 20px rgba(0,0,0,.06), 0 1px 4px rgba(0,0,0,.02)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 border: "1px solid rgba(0,0,0,.06)",
                 overflow: "hidden",
@@ -112,23 +137,24 @@ export default function Login({ onLogin }) {
                 <p style={{ fontSize: 13, color: "#64748B", lineHeight: 1.7 }}>
                   Enter your credentials to access the {selCfg.city} inventory dashboard.
                 </p>
+                
                 {/* site preview card */}
                 <div style={{
                   marginTop: 24, padding: "18px 20px",
                   background: "#fff",
                   borderRadius: 16,
                   border: `1.5px solid ${selCfg.accentBorder}`,
-                  boxShadow: "0 2px 12px rgba(0,0,0,.06)",
+                  boxShadow: "0 4px 20px rgba(0,0,0,.04)",
                   display: "flex", alignItems: "center", gap: 14,
                 }}>
                   <div style={{
                     width: 52, height: 52, borderRadius: 12,
                     background: selCfg.gradient,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 26, flexShrink: 0,
+                    color: "#fff", flexShrink: 0,
                     boxShadow: `0 4px 16px ${selCfg.accent}30`,
                   }}>
-                    {selCfg.emoji}
+                    {SelectedIcon && <SelectedIcon size={24} strokeWidth={2} />}
                   </div>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: "#0F172A" }}>{SITE_USERS[sel].label}</div>
@@ -139,18 +165,28 @@ export default function Login({ onLogin }) {
                   </div>
                 </div>
 
-                {/* feature badges */}
+                {/* feature badges with Lucide Icons */}
                 <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
-                  {["📊 Shared Ledger", "🚚 Transit Tracking", "📈 Forecasting"].map(f => (
-                    <span key={f} style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 20, padding: "4px 12px", fontSize: 11, fontWeight: 500, color: "#475569" }}>{f}</span>
-                  ))}
+                  {[
+                    { label: "Shared Ledger", icon: Layers },
+                    { label: "Transit Tracking", icon: Truck },
+                    { label: "Forecasting", icon: TrendingUp }
+                  ].map(f => {
+                    const FeatureIcon = f.icon;
+                    return (
+                      <span key={f.label} style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: "#475569", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <FeatureIcon size={14} className="text-slate-400" />
+                        {f.label}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
             {/* stats row */}
             {step === 1 && (
-              <div style={{ display: "flex", gap: 20, justifyContent: step === 1 ? "center" : "flex-start" }}>
+              <div style={{ display: "flex", gap: 24, justifyContent: step === 1 ? "center" : "flex-start" }}>
                 {[
                   ["2", "Active Sites"],
                   ["3", "Inventory Types"],
@@ -169,8 +205,8 @@ export default function Login({ onLogin }) {
           <div style={{
             background: "#fff",
             borderRadius: 24,
-            boxShadow: "0 8px 40px rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.04)",
-            border: "1px solid rgba(0,0,0,.06)",
+            boxShadow: "0 8px 40px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.02)",
+            border: "1px solid rgba(0,0,0,.05)",
             overflow: "hidden",
           }}>
 
@@ -184,6 +220,8 @@ export default function Login({ onLogin }) {
                   {Object.entries(SITE_USERS).map(([site, cfg]) => {
                     const sc     = SITE_CFG[site];
                     const active = sel === site;
+                    const SiteIcon = sc.icon;
+                    
                     return (
                       <div key={site} onClick={() => setSel(site)}
                         style={{
@@ -197,23 +235,26 @@ export default function Login({ onLogin }) {
                           boxShadow: active ? `0 0 0 4px ${sc.accent}14, 0 4px 16px ${sc.accent}18` : "none",
                           transform: active ? "scale(1.01)" : "scale(1)",
                         }}>
-                        {/* icon */}
+                        
+                        {/* site specific icon wrapper */}
                         <div style={{
                           width: 52, height: 52, borderRadius: 14, flexShrink: 0,
                           background: active ? sc.gradient : "linear-gradient(135deg, #F1F5F9, #E2E8F0)",
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 26,
+                          color: active ? "#fff" : "#64748B",
                           boxShadow: active ? `0 4px 16px ${sc.accent}30` : "none",
                           transition: "all .2s",
                         }}>
-                          {sc.emoji}
+                          <SiteIcon size={24} strokeWidth={2} />
                         </div>
+                        
                         {/* text */}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 15, fontWeight: 700, color: active ? sc.accent : "#0F172A" }}>{cfg.label}</div>
                           <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>{sc.tag} · {site}</div>
                         </div>
-                        {/* radio */}
+                        
+                        {/* radio selector dot */}
                         <div style={{
                           width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
                           border: `2px solid ${active ? sc.accent : "#CBD5E1"}`,
@@ -239,8 +280,10 @@ export default function Login({ onLogin }) {
                     transition: "all .2s",
                     boxShadow: sel ? `0 4px 20px ${selCfg?.accent || "#1D4ED8"}40` : "none",
                     letterSpacing: ".2px",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8
                   }}>
-                  {sel ? `Continue to ${SITE_USERS[sel].label} →` : "Select a site to continue"}
+                  <span>{sel ? `Continue to ${SITE_USERS[sel].label}` : "Select a site to continue"}</span>
+                  {sel && <ArrowRight size={16} />}
                 </button>
 
                 <div style={{ marginTop: 20, padding: "14px 16px", background: "#F8FAFC", borderRadius: 12, border: "1px solid #E2E8F0" }}>
@@ -263,7 +306,6 @@ export default function Login({ onLogin }) {
             {/* ── STEP 2: credentials ── */}
             {step === 2 && sel && selCfg && (
               <div>
-                {/* colored top strip */}
                 <div style={{ height: 6, background: selCfg.gradient }} />
 
                 <div style={{ padding: "28px 32px 32px" }}>
@@ -274,7 +316,9 @@ export default function Login({ onLogin }) {
                   <div style={{ marginBottom: 16 }}>
                     <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: ".7px", display: "block", marginBottom: 7 }}>Username</label>
                     <div style={{ position: "relative" }}>
-                      <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 15, pointerEvents: "none" }}>👤</span>
+                      <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#94A3B8", pointerEvents: "none", display: "flex", alignItems: "center" }}>
+                        <User size={18} />
+                      </span>
                       <input
                         type="text"
                         value={user}
@@ -284,7 +328,7 @@ export default function Login({ onLogin }) {
                         style={{
                           width: "100%", height: 48,
                           border: `1.5px solid ${err ? "#FECACA" : "#E2E8F0"}`,
-                          borderRadius: 12, padding: "0 14px 0 40px",
+                          borderRadius: 12, padding: "0 14px 0 44px",
                           fontSize: 13, outline: "none", color: "#0F172A",
                           background: err ? "#FEF2F2" : "#FAFAFA",
                           transition: "all .15s",
@@ -297,7 +341,9 @@ export default function Login({ onLogin }) {
                   <div style={{ marginBottom: 20 }}>
                     <label style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: ".7px", display: "block", marginBottom: 7 }}>Password</label>
                     <div style={{ position: "relative" }}>
-                      <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 15, pointerEvents: "none" }}>🔒</span>
+                      <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#94A3B8", pointerEvents: "none", display: "flex", alignItems: "center" }}>
+                        <Lock size={18} />
+                      </span>
                       <input
                         type={showPass ? "text" : "password"}
                         value={pass}
@@ -307,7 +353,7 @@ export default function Login({ onLogin }) {
                         style={{
                           width: "100%", height: 48,
                           border: `1.5px solid ${err ? "#FECACA" : "#E2E8F0"}`,
-                          borderRadius: 12, padding: "0 44px 0 40px",
+                          borderRadius: 12, padding: "0 44px 0 44px",
                           fontSize: 13, outline: "none", color: "#0F172A",
                           background: err ? "#FEF2F2" : "#FAFAFA",
                           transition: "all .15s",
@@ -316,16 +362,17 @@ export default function Login({ onLogin }) {
                       <button
                         type="button"
                         onClick={() => setShowPass(p => !p)}
-                        style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 15, padding: 4, color: "#94A3B8" }}>
-                        {showPass ? "🙈" : "👁️"}
+                        style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 4, color: "#94A3B8", display: "flex", alignItems: "center" }}>
+                        {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
                   </div>
 
-                  {/* error */}
+                  {/* error alert banner */}
                   {err && (
                     <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#B91C1C", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-                      <span>⚠️</span> {err}
+                      <AlertCircle size={16} style={{ flexShrink: 0 }} /> 
+                      <span>{err}</span>
                     </div>
                   )}
 
@@ -340,20 +387,27 @@ export default function Login({ onLogin }) {
                       boxShadow: `0 4px 20px ${selCfg.accent}40`,
                       letterSpacing: ".2px",
                       transition: "all .2s",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8
                     }}>
-                    Sign In to {selCfg.city} →
+                    <span>Sign In to {selCfg.city}</span>
+                    <ArrowRight size={16} />
                   </button>
 
-                  {/* back */}
+                  {/* back button */}
                   <button
                     onClick={() => { setStep(1); setUser(""); setPass(""); setErr(""); }}
                     style={{
                       width: "100%", height: 42, borderRadius: 12,
                       border: "1.5px solid #E2E8F0", background: "#fff",
                       color: "#64748B", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                    }}>
-                    ← Back to site selection
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      transition: "all .2s"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "#F8FAFC"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "#fff"}
+                  >
+                    <ArrowLeft size={16} />
+                    <span>Back to site selection</span>
                   </button>
                 </div>
               </div>
@@ -362,10 +416,10 @@ export default function Login({ onLogin }) {
         </div>
       </div>
 
-      {/* ── bottom bar ── */}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(248,250,252,.8)", backdropFilter: "blur(8px)", borderTop: "1px solid rgba(0,0,0,.06)", zIndex: 10 }}>
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#34D399", boxShadow: "0 0 8px #34D39966" }} />
-        <span style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>UBL CardStock IMS · Shared Ledger Active · KHI & LHE</span>
+      {/* ── bottom status bar ── */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(248,250,252,.8)", backdropFilter: "blur(8px)", borderTop: "1px solid rgba(0,0,0,.06)", zIndex: 10 }}>
+        <Activity size={14} style={{ color: "#10B981" }} />
+        <span style={{ fontSize: 13, color: "#64748B", fontWeight: 500 }}>UBL CardStock IMS · Shared Ledger Active · KHI & LHE</span>
       </div>
 
       <style>{`

@@ -7,6 +7,8 @@ import { Pill, InvTypePill, SegPill, SitePill } from "../ui/Pill";
 import SharedSyncBanner from "../layout/SharedSyncBanner";
 
 export default function HistoryTab({ allEntries, setAllEntries, toast, transitRecords, currentSite }) {
+
+  // ── ALL STATE DECLARATIONS FIRST ──
   const [filterSite, setFilterSite] = useState("ALL");
   const [filterInvType, setFilterInvType] = useState("");
   const [filterCT, setFilterCT] = useState("");
@@ -14,13 +16,53 @@ export default function HistoryTab({ allEntries, setAllEntries, toast, transitRe
   const [selectedProduct, setSelectedProduct] = useState("");
   const [analyticsSearch, setAnalyticsSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [loading, setLoading] = useState(true); 
 
+  // ── FETCH FROM DB ON MOUNT ──
+  useEffect(() => {
+    const fetchEntries = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch("http://localhost:5000/api/entries");
+        const data = await res.json();
+        const normalized = data.map(e => ({
+          id: e.id,
+         date: typeof e.date === "string" ? e.date.slice(0, 10) : e.date,
+          site: e.site,
+          invType: e.inv_type,
+          cardType: e.card_type,
+          scheme: e.scheme,
+          plasticCategory: e.plastic_category,
+          subProduct: e.sub_product,
+          pageSize: e.page_size,
+          segment: e.segment,
+          batchNumber: e.batch_number,
+          openingBalance: e.opening_balance,
+          receivedFromVendor: e.received_from_vendor,
+          totalConsumption: e.batch_count,
+          extraCount: e.extra_count,
+          damaged: e.damaged,
+          movedToOtherSite: e.moved_to_other_site,
+          closingBalance: e.closing_balance,
+          savedAt: e.saved_at,
+          sourceExcel: e.source_excel,
+        }));
+        setAllEntries(normalized);
+      } catch (err) {
+        console.error("Failed to fetch entries:", err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEntries();
+  }, []);
+
+  // ── CLOSE DROPDOWN ON OUTSIDE CLICK ──
   useEffect(() => {
     const close = () => setIsDropdownOpen(false);
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
   }, []);
-
   const filtered = useMemo(() => {
     const q = searchQ.toLowerCase().trim();
     return allEntries
@@ -124,9 +166,9 @@ export default function HistoryTab({ allEntries, setAllEntries, toast, transitRe
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             {[
-              ["🏙️ Karachi (KHI)", khi, C.blue, C.blueLight, C.blueBorder],
-              ["🌆 Lahore (LHE)", lhe, C.purple, C.purpleLight, C.purpleBorder],
-              ["📋 Combined Total", { total: allEntries.length }, C.navy, "#EEF1F8", C.borderStrong]
+              ["Karachi (KHI)", khi, C.blue, C.blueLight, C.blueBorder],
+              ["Lahore (LHE)", lhe, C.purple, C.purpleLight, C.purpleBorder],
+              ["Combined Total", { total: allEntries.length }, C.navy, "#EEF1F8", C.borderStrong]
             ].map(([loc, data, c, bg, bd]) => (
               <div key={loc} style={{ background: bg, border: `1.5px solid ${bd}`, borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", justifyContent: "between" }}>
                 <div>
@@ -181,31 +223,82 @@ export default function HistoryTab({ allEntries, setAllEntries, toast, transitRe
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: C.navy }}>
-                  {["Site","Date","Type","Card Type","Scheme","Sub Product","Page Size","Seg","Opening","Received","Consumed","Damaged","Moved","Transit","Closing",""].map((h, i) => (
-                    <th key={i} style={{ padding: "10px 12px", color: "rgba(255,255,255,.7)", fontSize: 9, fontWeight: 700, textTransform: "uppercase", textAlign: i > 8 ? "right" : "left", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
+                  {(() => {
+  const showMailerCols = filterInvType === "MAILER" || filterInvType === "ENVELOPE";
+  const showPlasticCols = filterInvType === "PLASTIC";
+  const productCols = showMailerCols
+    ? ["Plastic Category", "Page Size"]
+    : showPlasticCols
+      ? ["Sub Product"]
+      : ["Product / Category", "Page Size"]; // "All Types" view — generic combined column
+
+  return ["Site", "Date", "Type", "Card Type", "Scheme", ...productCols, "Seg", "Opening", "Received", "Consumed", "Extra Count", "Damaged", "Moved", "Transit", "Closing", ""].map((h, i) => (
+    <th key={i} style={{ padding: "10px 12px", color: "rgba(255,255,255,.7)", fontSize: 9, fontWeight: 700, textTransform: "uppercase", textAlign: i > 4 + productCols.length ? "right" : "left", whiteSpace: "nowrap" }}>{h}</th>
+  ));
+})()}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((e, i) => {
                   const tr = transitRecords.find(r => r.entryId === e.id);
                   return (
-                    <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? "#fff" : C.surface }}>
+                    <tr key={`entry-${e.id}-${i}`} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? "#fff" : C.surface }}>
                       <td style={{ padding: "9px 12px" }}><SitePill site={e.site} /></td>
                       <td style={{ padding: "9px 12px", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap" }}>{fmtDate(e.date)}</td>
                       <td style={{ padding: "9px 12px" }}><InvTypePill type={e.invType || "PLASTIC"} /></td>
                       <td style={{ padding: "9px 12px" }}><Pill label={e.cardType} color={e.cardType === "DEBIT" ? C.blue : C.red} bg={e.cardType === "DEBIT" ? C.blueLight : C.redLight} border={e.cardType === "DEBIT" ? C.blueBorder : C.redBorder} /></td>
                       <td style={{ padding: "9px 12px", fontWeight: 600, color: C.text, fontSize: 11 }}>{e.scheme}</td>
-                      <td style={{ padding: "9px 12px", fontSize: 11, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.subProduct || "—"}</td>
-                      <td style={{ padding: "9px 12px" }}>{e.pageSize ? <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, background: C.tealLight, color: C.teal }}>{e.pageSize}</span> : "—"}</td>                      
+                      {(() => {
+                        const isMailerRow = e.invType === "MAILER" || e.invType === "ENVELOPE";
+                        const showMailerCols = filterInvType === "MAILER" || filterInvType === "ENVELOPE";
+                        const showPlasticCols = filterInvType === "PLASTIC";
+
+                        if (showPlasticCols) {
+                          // Filtered to PLASTIC only — single Sub Product column, no Page Size at all
+                          return (
+                            <td style={{ padding: "9px 12px", fontSize: 11, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.subProduct || "—"}</td>
+                          );
+                        }
+                        if (showMailerCols) {
+                          // Filtered to MAILER/ENVELOPE only — Plastic Category + Page Size
+                          return (
+                            <>
+                              <td style={{ padding: "9px 12px", fontSize: 11, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.plasticCategory || "—"}</td>
+                              <td style={{ padding: "9px 12px" }}>
+                                {e.pageSize
+                                  ? <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, background: C.tealLight, color: C.teal }}>{e.pageSize}</span>
+                                  : "—"}
+                              </td>
+                            </>
+                          );
+                        }
+                        // "All Types" view — generic combined column, per-row content depends on invType
+                        return (
+                          <>
+                            <td style={{ padding: "9px 12px", fontSize: 11, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {isMailerRow ? (e.plasticCategory || "—") : (e.subProduct || "—")}
+                            </td>
+                            <td style={{ padding: "9px 12px" }}>
+                              {isMailerRow && e.pageSize
+                                ? <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, background: C.tealLight, color: C.teal }}>{e.pageSize}</span>
+                                : "—"}
+                            </td>
+                          </>
+                        );
+                      })()}
+
                       <td style={{ padding: "9px 12px" }}>
-                        <SegPill seg={e.segment}/>
-                        {e.ntbBatch && <div style={{ fontSize: 9, color: C.blue, fontWeight: 600 }}>NTB: {e.ntbBatch}</div>}
-                        {e.etbBatch && <div style={{ fontSize: 9, color: C.amber, fontWeight: 600 }}>ETB: {e.etbBatch}</div>}
+                        <SegPill seg={e.segment} />
+                        {e.batchNumber && (
+                          <div style={{ fontSize: 9, color: C.blue, fontWeight: 600, marginTop: 2 }}>
+                            {e.batchNumber}
+                          </div>
+                        )}
                       </td>
-                      {[e.openingBalance, e.receivedFromVendor, e.totalConsumption, e.damaged, e.movedToOtherSite].map((v, j) => (
-                        <td key={j} style={{ padding: "9px 12px", textAlign: "right", fontFamily: "monospace", fontWeight: 600, color: j === 1 ? C.green : j === 3 ? C.amber : C.text }}>{fmt(v)}</td>
+                      {[e.openingBalance, e.receivedFromVendor, e.totalConsumption,e.extraCount, e.damaged, e.movedToOtherSite].map((v, j) => (
+                        <td key={`${e.id}-col-${j}`} style={{ padding: "9px 12px", textAlign: "right", fontFamily: "monospace", fontWeight: 600, color: j === 1 ? C.green : j === 3 ? C.amber : C.text }}>{fmt(v)}</td>
                       ))}
+
                       <td style={{ padding: "9px 12px", textAlign: "right" }}>{tr ? <Pill label={tr.status === "DELIVERED" ? "Delivered" : "Transit"} color={tr.status === "DELIVERED" ? C.green : C.orange} bg={tr.status === "DELIVERED" ? C.greenLight : C.orangeLight} border={tr.status === "DELIVERED" ? C.greenBorder : C.orangeBorder} /> : "—"}</td>
                       <td style={{ padding: "9px 12px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: e.closingBalance < 0 ? C.red : C.text }}>{fmt(e.closingBalance)}</td>
                       <td style={{ padding: "9px 12px" }}><button onClick={() => del(e.id)} style={{ padding: "4px 8px", borderRadius: 6, background: C.redLight, color: C.red, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Delete</button></td>

@@ -127,8 +127,10 @@ export async function parseDailyStockExcel(file) {
     PRODUCT_CODE:               "irisCode",
     IRIS_PRODUCT_NAME:          "IRISProductName",
     BATCH_COUNT:                "batchCount",
-    NTB_BATCH:                  "ntbBatch",
-    BATCH_NO:                   "ntbBatch",
+    NTB_BATCH:                  "rawBatch",
+    BATCH_NO:                   "rawBatch",
+    BATCH_NUMBER:                "rawBatch",
+    BATCH:                      "rawBatch",
     STOCK_RECEIVED_FROM_VENDOR: "stockReceived",
     STOCK_RECEIVED:             "stockReceived",
     RECEIVED:                   "stockReceived",
@@ -170,28 +172,75 @@ export async function parseDailyStockExcel(file) {
 
     const matched = matchSubProduct(irisDesc);
 
-    let ntbBatch = null;
-    const rb = String(rec.ntbBatch || "").trim();
-    if (rb) {
-      const m = rb.match(/\d+/);
-      ntbBatch = m ? `NTB Batch ${m[0]}` : rb;
-    } else {
-      const m = irisDesc.toUpperCase().match(/BATCH[\s\-#]*(\d+)|NTB[\s\-]*(\d+)|\bB(\d)\b/);
-      if (m) { const n = m[1] || m[2] || m[3]; ntbBatch = `NTB Batch ${n}`; }
-    }
+// const rb = String(rec.rawBatch || "").trim(); // rec.ntbBatch is mapped from NTB_BATCH/BATCH_NO columns
+// if (rb) {
+//   const m = rb.match(/\d+/);
+//   const num = m ? m[0] : null;
+//   if (num) {
+//     if (segment === "NTB")     batchNumber = `NTB Batch ${num}`;
+//     else if (segment === "ETB") batchNumber = `ETB Batch ${num}`;
+//     else                        batchNumber = `RENEWAL Batch ${num}`;
+//   } else {
+//     batchNumber = rb; // use as-is if no number found
+//   }
+// } else {
+//   // fallback: try to extract from irisDesc
+//   const m = irisDesc.toUpperCase().match(/BATCH[\s\-#]*(\d+)/);
+//   if (m) {
+//     const num = m[1];
+//     if (segment === "NTB")      batchNumber = `NTB Batch ${num}`;
+//     else if (segment === "ETB") batchNumber = `ETB Batch ${num}`;
+//     else                        batchNumber = `RENEWAL Batch ${num}`;
+//   }
+// }
 
-    let segment = inferSegment(irisDesc);
-    const sr = String(rec.segment || "").toUpperCase();
-    if      (sr.includes("NTB")) segment = "NTB";
-    else if (sr.includes("REN")) segment = "RENEWAL";
-    else if (sr.includes("ETB")) segment = "ETB";
+ // STEP 1 — infer segment from description (lowest priority fallback)
+let segment = inferSegment(irisDesc);
 
+// STEP 2 — Excel SEGMENT column overrides description inference
+const sr = String(rec.segment || "").toUpperCase().trim();
+if      (sr.includes("NTB")) segment = "NTB";
+else if (sr.includes("REN")) segment = "RENEWAL";
+else if (sr.includes("ETB")) segment = "ETB";
+
+// STEP 3 — raw batch text can also tell us segment (overrides ETB default only)
+const rb = String(rec.rawBatch || "").trim();
+const rbUp = rb.toUpperCase();
+if (rb) {
+  if (rbUp.includes("NTB"))                            segment = "NTB";
+  else if (rbUp.includes("REN"))                       segment = "RENEWAL";
+  else if (rbUp.includes("ETB"))                       segment = "ETB";
+  // if batch has no prefix (e.g. just "1" or "Batch 1"), keep segment as-is
+}
+
+// STEP 4 — build batchNumber using final resolved segment
+let batchNumber = null;
+if (rb) {
+  const m = rb.match(/\d+/);
+  const num = m ? m[0] : null;
+  if (num) {
+    if      (segment === "NTB")     batchNumber = `NTB Batch ${num}`;
+    else if (segment === "ETB")     batchNumber = `ETB Batch ${num}`;
+    else if (segment === "RENEWAL") batchNumber = `RENEWAL Batch ${num}`;
+  } else {
+    batchNumber = rb; // use as-is if already a full string like "NTB Batch 1"
+  }
+} else {
+  // fallback: try extracting batch number from irisDesc
+  const m = irisDesc.toUpperCase().match(/BATCH[\s\-#]*(\d+)/);
+  if (m) {
+    const num = m[1];
+    if      (segment === "NTB")     batchNumber = `NTB Batch ${num}`;
+    else if (segment === "ETB")     batchNumber = `ETB Batch ${num}`;
+    else if (segment === "RENEWAL") batchNumber = `RENEWAL Batch ${num}`;
+  }
+}
     return {
       rowIndex,
       irisDesc,
       irisCode:       String(rec.irisCode || "").trim(),
       segment,
-      ntbBatch,
+      batchNumber, 
       scheme:         String(rec.scheme || matched?.scheme || "").trim(),
       stockReceived:  parseNumber(rec.stockReceived),
       batchCount:     parseNumber(rec.batchCount),

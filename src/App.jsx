@@ -20,6 +20,8 @@ import HistoryTab      from "./components/tabs/HistoryTab";
 import TransitTab      from "./components/tabs/TransitTab";
 import ReportsTab      from "./components/tabs/ReportsTab";
 import ForecastTab     from "./components/tabs/ForecastTab";
+import CertificateTab  from "./components/tabs/CertificatesTab";
+import axios from "axios";
 
 export default function App() {
   const [currentSite, setCurrentSite] = useState(null);
@@ -31,7 +33,19 @@ export default function App() {
   const [irisFiles,       setIrisFiles]       = useLS("ims_iris_files",[]);
   const [dailyRows,       setDailyRows]       = useLS("ims_daily_rows",[]);
   const [dailyFileName,   setDailyFileName]   = useLS("ims_daily_name","");
-  const [orders, setOrders] = useLS("ims_orders", {});
+  const [orders, setOrders] = useState({});
+
+useEffect(() => {
+  const fetchOrders = async () => {
+    try {
+      const res = await axios.get("http://localhost:5000/api/orders");
+      setOrders(res.data);
+    } catch (err) {
+      console.error("Failed to fetch orders:", err.message);
+    }
+  };
+  fetchOrders();
+}, []);
 
   const [tab,   setTab]   = useState("entry");
   const [modal, setModal] = useState(null);
@@ -122,9 +136,9 @@ const signOut = useCallback(() => {
           {/* header */}
           <header style={{ height: 52, background: "#fff", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", position: "sticky", top: 0, zIndex: 100 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-              <span style={{ fontSize: 11, color: C.textFaint }}>UBL CardStock</span>
+              <span style={{ fontSize: 14, color: C.textFaint }}>UBL CardStock</span>
               <span style={{ color: C.border }}>›</span>
-              <span style={{ fontSize: 11, fontWeight: 600, color: C.textMid }}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.textMid }}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 20, background: "rgba(52,211,153,.1)", border: "1px solid rgba(52,211,153,.3)" }}>
@@ -133,7 +147,7 @@ const signOut = useCallback(() => {
               </div>
               <SitePill site={currentSite} />
               <span style={{ fontSize: 11, color: C.textMuted, background: C.surface, border: `1px solid ${C.border}`, padding: "4px 12px", borderRadius: 20 }}>{dateStr}</span>
-              <button onClick={exportXL} style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "none", background: C.green, color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>⬇ Export</button>
+              {/* <button onClick={exportXL} style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "none", background: C.green, color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>⬇ Export</button> */}
             </div>
           </header>
 
@@ -156,8 +170,10 @@ const signOut = useCallback(() => {
             {tab === "history"  && <HistoryTab  allEntries={allEntries} setAllEntries={setAllEntries} toast={toast} transitRecords={transitRecords} currentSite={currentSite} />}
             {tab === "transit"  && <TransitTab  currentSite={currentSite} transitRecords={transitRecords} setTransitRecords={setTransitRecords} toast={toast} showAlert={showAlert} closing={closing} setClosing={setClosing} />}
             {tab === "reports"  && <ReportsTab  entries={allEntries} dailyRows={dailyRows} currentSite={currentSite} />}
-            {tab === "forecast"    && <ForecastTab    entries={allEntries} closing={closing} currentSite={currentSite} />}
+            {tab === "forecast"    && <ForecastTab    entries={allEntries} closing={closing} currentSite={currentSite} orders={orders} 
+        setOrders={setOrders}/>}
             {tab === "consumables" && <ConsumablesTab entries={allEntries} />}          </main>
+            {tab==="certificate" && <CertificateTab entries={allEntries} currentSite={currentSite}/>}
         </div>
 
         <Toast toasts={toasts} />
