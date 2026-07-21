@@ -7,6 +7,7 @@ import { buildForecast } from "./utils/forecast";
 import useLS from "./hooks/useLS";
 import useToast from "./hooks/useToast";
 import ConsumablesTab from "./components/tabs/ConsumblesTab";
+import axios from "axios";
 
 import Modal           from "./components/ui/Modal";
 import Toast           from "./components/ui/Toast";
@@ -20,8 +21,7 @@ import HistoryTab      from "./components/tabs/HistoryTab";
 import TransitTab      from "./components/tabs/TransitTab";
 import ReportsTab      from "./components/tabs/ReportsTab";
 import ForecastTab     from "./components/tabs/ForecastTab";
-import CertificateTab  from "./components/tabs/CertificatesTab";
-import axios from "axios";
+import CertificateTab from "./components/tabs/CertificatesTab";
 
 export default function App() {
   const [currentSite, setCurrentSite] = useState(null);
@@ -168,12 +168,14 @@ const signOut = useCallback(() => {
             )}
             {tab === "balances" && <BalancesTab closing={closing} setClosing={setClosing} toast={toast} showAlert={showAlert} entries={allEntries} currentSite={currentSite} />}
             {tab === "history"  && <HistoryTab  allEntries={allEntries} setAllEntries={setAllEntries} toast={toast} transitRecords={transitRecords} currentSite={currentSite} />}
-            {tab === "transit"  && <TransitTab  currentSite={currentSite} transitRecords={transitRecords} setTransitRecords={setTransitRecords} toast={toast} showAlert={showAlert} closing={closing} setClosing={setClosing} />}
-            {tab === "reports"  && <ReportsTab  entries={allEntries} dailyRows={dailyRows} currentSite={currentSite} />}
+            {tab === "transit"  && <TransitTab  currentSite={currentSite} transitRecords={transitRecords} setTransitRecords={setTransitRecords} toast={toast} showAlert={showAlert} closing={closing} setClosing={setClosing} allEntries={allEntries} setAllEntries={setAllEntries} />}           
+             {tab === "reports"  && <ReportsTab  entries={allEntries} dailyRows={dailyRows} currentSite={currentSite} />}
             {tab === "forecast"    && <ForecastTab    entries={allEntries} closing={closing} currentSite={currentSite} orders={orders} 
         setOrders={setOrders}/>}
-            {tab === "consumables" && <ConsumablesTab entries={allEntries} />}          </main>
+            {tab === "consumables" && <ConsumablesTab entries={allEntries} />}   
             {tab==="certificate" && <CertificateTab entries={allEntries} currentSite={currentSite}/>}
+                   </main>
+            
         </div>
 
         <Toast toasts={toasts} />

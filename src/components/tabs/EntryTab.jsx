@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { C } from "../../constants/color";
 import { CAT, INVENTORY_TYPES, VENDORS } from "../../constants/catalog";
-import { today, fmt, fmtDate, ckp, ckCat } from "../../utils/helper";
+import { today, fmt, fmtDate, ckp, ckCat ,ckCatSite} from "../../utils/helper";
 import { parseIrisExcel, parseDailyStockExcel } from "../../utils/irisEngine";
 import useLS from "../../hooks/useLS";
 import { Card, CardHeader } from "../ui/Card";
@@ -86,12 +86,11 @@ export default function EntryTab({
 
   const obRec = useMemo(() => {
   if (!ct || !sc || !cat) return null;
-  const catKey = ckCat(ct, sc, cat, invType);
-  const legacyCatKey = ckCat(ct, sc, cat);
-  return closing[catKey] || closing[legacyCatKey] || null;
-}, [ct, sc, cat, sub, invType, closing]);
+  const siteKey = ckCatSite(ct, sc, cat, invType, currentSite);
+  return closing[siteKey] || null;
+}, [ct, sc, cat, sub, invType, closing, currentSite]);
 
-const ob = obRec ? Math.max(0, obRec.value) : 0;
+  const ob = obRec ? Math.max(0, obRec.value) : 0;
   const totalRecv = vendors.reduce((s, v) => s + (parseInt(v.qty) || 0), 0);
   const movVal = parseInt(mov) || 0;
   const cl = ob + totalRecv - (parseInt(cons) || 0) - (parseInt(dmg) || 0) - movVal;
@@ -243,7 +242,7 @@ const ob = obRec ? Math.max(0, obRec.value) : 0;
   };
 
   /* ── Save ── */
-  const save = async () => {
+ const save = async () => {
     if (!date) return showAlert({ type: "error", title: "Missing Date" });
     if (invType === "PLASTIC" && !sub)
       return showAlert({ type: "error", title: "Missing Sub Product" });
@@ -251,11 +250,7 @@ const ob = obRec ? Math.max(0, obRec.value) : 0;
       return showAlert({ type: "error", title: "Missing Page Size", msg: "Please select A4 or Legal." });
 
     const entry = {
-      date,
-      invType,
-      cardType: ct,
-      scheme: sc,
-      plasticCategory: cat,
+      date, invType, cardType: ct, scheme: sc, plasticCategory: cat,
       subProduct: invType === "PLASTIC" ? sub : null,
       pageSize: invType === "MAILER" ? pageSize : null,
       segment: seg,
@@ -272,90 +267,68 @@ const ob = obRec ? Math.max(0, obRec.value) : 0;
       site: currentSite,
       savedAt: new Date().toISOString().slice(0, 19).replace("T", " "),
     };
-    console.log("ENTRY SENT TO BACKEND:");
-    console.log(entry);
-    console.log("Date being sent:", entry.date);
-console.log(entry);
-    try {
-      const res = await axios.post("http://localhost:5000/api/entries", entry);
 
-      if (res.data.success) {
-        toast("Saved to DB successfully!", "success");
-
-        // optional local update
-        setEntries(prev => [...prev, entry]);
-
-        // ✅ FIX: push the new closing balance into the shared ledger
-        // so it becomes the opening balance for the next entry/bulk upload
-        setClosing(prev => ({
-          ...prev,
-          [ckCat(entry.cardType, entry.scheme, entry.plasticCategory, entry.invType)]: {
-            value: entry.closingBalance,
-            updatedAt: new Date().toISOString(),
-            date: entry.date,
-            updatedBy: currentSite,
-          }
-        }));
-
-        // if you also persist closing balances to the backend (as bulkSave does),
-        // add this too so a page refresh still pulls the right opening balance:
-        try {
-          await axios.post("http://localhost:5000/api/closing-balances", {
-            balanceKey: ckCat(entry.cardType, entry.scheme, entry.plasticCategory, entry.invType),
-            value: entry.closingBalance,
-            entryDate: entry.date,
-            updatedBy: currentSite,
-          });
-        } catch (err) {
-          console.error("Failed to persist closing balance:", err.message);
-        }
-
-        reset();
-      }
-    } catch (err) {
-      showAlert({
-        type: "error",
-        title: "Backend Error",
-        msg: err.message
-      });
+    // If units are being moved, show the Transit modal first.
+    // Actual save happens only after the user confirms (or cancels).
+    if (entry.movedToOtherSite > 0) {
+      setPendingEntry(entry);
+      setShowTransit(true);
+      return;
     }
+
+    await performSave(entry, null);
   };
 
-  const doSave = (entry, transitNote = null) => {
-    setEntries(p => [...p, entry]);
-    // Mark any received orders for this product as counted-in
-    setOrders(prev => {
-      const next = { ...prev };
-      Object.keys(next).forEach(k => {
-        if (next[k].received && !next[k].countedIn &&
-          next[k].key === `${entry.invType}|${entry.cardType}|${entry.scheme}|${entry.plasticCategory}|${entry.subProduct}|${entry.segment}`)
-          next[k] = { ...next[k], countedIn: true };
+  const performSave = async (entry, transitNote) => {
+    try {
+      const res = await axios.post("http://localhost:5000/api/entries", entry);
+      if (!res.data.success) return;
+
+      const savedEntry = { ...entry, id: res.data.entryId };
+      toast("Saved to DB successfully!", "success");
+      setEntries(prev => [...prev, savedEntry]);
+
+const catKey = ckCatSite(entry.cardType, entry.scheme, entry.plasticCategory, entry.invType, currentSite);      setClosing(prev => ({
+        ...prev,
+        [catKey]: { value: entry.closingBalance, updatedAt: new Date().toISOString(), date: entry.date, updatedBy: currentSite }
+      }));
+      await axios.post("http://localhost:5000/api/closing-balances", {
+        balanceKey: catKey, value: entry.closingBalance, entryDate: entry.date, updatedBy: currentSite,
       });
-      return next;
-    });
-    setClosing(prev => ({
-      ...prev,
-      [ckCat(entry.cardType, entry.scheme, entry.plasticCategory, entry.invType)]: {
-        value: entry.closingBalance, updatedAt: new Date().toISOString(), date: entry.date, updatedBy: currentSite
+
+      if (entry.movedToOtherSite > 0 && transitNote !== null) {
+        try {
+          const trRes = await axios.post("http://localhost:5000/api/transit-records", {
+            entryId: savedEntry.id,
+            fromSite: currentSite,
+            toSite: currentSite === "KHI" ? "LHE" : "KHI",
+            date: entry.date,
+            quantity: entry.movedToOtherSite,
+            note: transitNote,
+            status: "IN_TRANSIT",
+          });
+          setTransitRecords(p => [...p, {
+            id: trRes.data.id, entryId: savedEntry.id,
+            fromSite: currentSite, toSite: currentSite === "KHI" ? "LHE" : "KHI",
+            date: entry.date, invType: entry.invType, cardType: entry.cardType,
+            scheme: entry.scheme, plasticCategory: entry.plasticCategory,
+            subProduct: entry.subProduct, segment: entry.segment,
+            quantity: entry.movedToOtherSite, note: transitNote,
+            status: "IN_TRANSIT", createdAt: trRes.data.createdAt, deliveredAt: null,
+          }]);
+        } catch (err) {
+          console.error("Failed to save transit record:", err.message);
+        }
+        showAlert({ type: "transit", title: "Dispatched to Lahore 🚚", msg: `<strong>${fmt(entry.movedToOtherSite)} units</strong> of <strong>${entry.subProduct}</strong> — In Transit.`, buttons: [{ label: "OK", type: "primary", color: C.orange }] });
+        toast(`${fmt(entry.movedToOtherSite)} units dispatched.`, "transit");
+      } else {
+        toast(`Saved · Closing: ${fmt(entry.closingBalance)} units.`, entry.closingBalance < 0 ? "warn" : "success");
       }
-    }));
-    if (entry.movedToOtherSite > 0 && transitNote !== null) {
-      const tr = {
-        id: "TR-" + entry.id, entryId: entry.id,
-        fromSite: currentSite, toSite: currentSite === "KHI" ? "LHE" : "KHI",
-        date: entry.date, invType: entry.invType, cardType: entry.cardType,
-        scheme: entry.scheme, plasticCategory: entry.plasticCategory,
-        subProduct: entry.subProduct, segment: entry.segment,
-        quantity: entry.movedToOtherSite, note: transitNote,
-        status: "IN_TRANSIT", createdAt: new Date().toISOString(), deliveredAt: null,
-      };
-      setTransitRecords(p => [...p, tr]);
-      showAlert({ type: "transit", title: "Dispatched to Lahore 🚚", msg: `<strong>${fmt(entry.movedToOtherSite)} units</strong> of <strong>${entry.subProduct}</strong> — In Transit.`, buttons: [{ label: "OK", type: "primary", color: C.orange }] });
-      toast(`${fmt(entry.movedToOtherSite)} units dispatched to LHE.`, "transit");
-    } else {
-      toast(`Saved · Closing: ${fmt(entry.closingBalance)} units.`, entry.closingBalance < 0 ? "warn" : "success");
+
+      reset();
+    } catch (err) {
+      showAlert({ type: "error", title: "Backend Error", msg: err.message });
     }
-    reset();
   };
 
   /* ── Bulk save ── */
@@ -396,8 +369,7 @@ const key =
     for (const row of Object.values(groupedRows)) {
       const segR = row.segment || "ETB";
 
-      const catKey = ckCat(row.cardType, row.scheme, row.plasticCategory, invType);
-      const legacyCatKey = ckCat(row.cardType, row.scheme, row.plasticCategory);
+const catKey = ckCatSite(row.cardType, row.scheme, row.plasticCategory, invType, currentSite);      const legacyCatKey = ckCatSite(row.cardType, row.scheme, row.plasticCategory);
       const obRec2 = newClosing[catKey] || newClosing[legacyCatKey] || null;
 
       const recv = Number(row.stockReceived) || 0;
@@ -416,9 +388,7 @@ const key =
     e.subProduct === row.subProduct &&
     e.segment === segR
 );
-
-      if (existing) {
-        // ── MERGE into existing entry instead of creating a duplicate ──
+if (existing) {
         const mergedReceived = (Number(existing.receivedFromVendor) || 0) + recv;
         const mergedConsumed = (Number(existing.totalConsumption) || 0) + cons2;
         const mergedExtra = (Number(existing.extraCount) || 0) + extra;
@@ -428,80 +398,66 @@ const key =
 
         try {
           const res = await axios.put(`http://localhost:5000/api/entries/${existing.id}`, {
-            receivedFromVendor: mergedReceived,
-            batchCount: mergedConsumed,
-            totalConsumption: mergedConsumed,
-            extraCount: mergedExtra,
-            damaged: mergedDamaged,
-            movedToOtherSite: mergedMoved,
-            closingBalance: mergedClosing,
+            receivedFromVendor: mergedReceived, batchCount: mergedConsumed, totalConsumption: mergedConsumed,
+            extraCount: mergedExtra, damaged: mergedDamaged, movedToOtherSite: mergedMoved, closingBalance: mergedClosing,
           });
 
           if (res.data.success) {
             const idx = newEntries.findIndex(e => e.id === existing.id);
-            newEntries[idx] = {
-              ...existing,
-              receivedFromVendor: mergedReceived,
-              totalConsumption: mergedConsumed,
-              extraCount: mergedExtra,
-              damaged: mergedDamaged,
-              movedToOtherSite: mergedMoved,
-              closingBalance: mergedClosing,
-            };
-            newClosing[catKey] = {
-              value: mergedClosing,
-              updatedAt: new Date().toISOString(),
-              date,
-              updatedBy: currentSite,
-            };
+            newEntries[idx] = { ...existing, receivedFromVendor: mergedReceived, totalConsumption: mergedConsumed, extraCount: mergedExtra, damaged: mergedDamaged, movedToOtherSite: mergedMoved, closingBalance: mergedClosing };
+            newClosing[catKey] = { value: mergedClosing, updatedAt: new Date().toISOString(), date, updatedBy: currentSite };
 
             await axios.post("http://localhost:5000/api/closing-balances", {
-              balanceKey: catKey,
-              value: mergedClosing,
-              entryDate: date,
-              updatedBy: currentSite,
+              balanceKey: catKey, value: mergedClosing, entryDate: date, updatedBy: currentSite,
             });
 
+            // ✅ Auto-create transit record ONLY for the newly-added moved amount (mov2),
+            // not the full mergedMoved — otherwise re-merging the same row repeatedly
+            // would double-count transit quantity that was already recorded earlier.
+            if (mov2 > 0) {
+  try {
+    const trRes = await axios.post("http://localhost:5000/api/transit-records", {
+      entryId: existing.id,
+      fromSite: currentSite,
+      toSite: currentSite === "KHI" ? "LHE" : "KHI",
+      date,
+      quantity: mov2,
+      note: "Bulk import — auto transit (merged)",
+      status: "IN_TRANSIT",
+    });
+    setTransitRecords(p => [...p, {
+      id: trRes.data.id, entryId: existing.id,
+      fromSite: currentSite, toSite: currentSite === "KHI" ? "LHE" : "KHI",
+      date, invType, cardType: row.cardType, scheme: row.scheme,
+      plasticCategory: row.plasticCategory, subProduct: row.subProduct, segment: segR,
+      quantity: mov2, note: "Bulk import — auto transit (merged)",
+      status: "IN_TRANSIT", createdAt: trRes.data.createdAt, deliveredAt: null,
+    }]);
+  } catch (err) {
+    console.error("Failed to save merged bulk transit record:", err.message);
+  }
+}
             merged++;
           }
         } catch (err) {
-          console.error("❌ MERGE FAILED for row:", {
-            subProduct: row.subProduct,
-            scheme: row.scheme,
-            plasticCategory: row.plasticCategory,
-            segment: segR,
-            batchNumber: row.batchNumber,
-            existingId: existing.id,
-            error: err.response?.data || err.message,
-          });
+          console.error("❌ MERGE FAILED for row:", { subProduct: row.subProduct, error: err.response?.data || err.message });
           skipped++;
         }
+      
       } else {
         // ── No existing match — create new entry as before ──
         const ob2 = obRec2 ? Math.max(0, obRec2.value) : 0;
         const cl2 = ob2 + recv - cons2 - dmg2 - mov2;
 
         const entry = {
-          date,
-          invType,
-          site: currentSite,
-          cardType: row.cardType,
-          scheme: row.scheme,
-          plasticCategory: row.plasticCategory,
-          subProduct: row.subProduct,
-          pageSize: row.pageSize || null,
-          segment: segR,
-          batchNumber: row.batchNumber || null,
-          etbBatch: null,
-          openingBalance: ob2,
-          receivedFromVendor: recv,
+          date, invType, site: currentSite,
+          cardType: row.cardType, scheme: row.scheme, plasticCategory: row.plasticCategory,
+          subProduct: row.subProduct, pageSize: row.pageSize || null,
+          segment: segR, batchNumber: row.batchNumber || null, etbBatch: null,
+          openingBalance: ob2, receivedFromVendor: recv,
           vendors: recv > 0 ? [{ name: "Daily Excel Import", qty: recv }] : [],
-          batchCount: cons2,
-          totalConsumption: cons2,
-          extraCount: extra,
-          damaged: dmg2,
-          movedToOtherSite: mov2,
-          closingBalance: cl2,
+          batchCount: cons2, totalConsumption: cons2, extraCount: extra,
+          damaged: dmg2, movedToOtherSite: mov2, closingBalance: cl2,
           savedAt: new Date().toISOString().slice(0, 19).replace("T", " "),
           sourceExcel: dailyFileName,
         };
@@ -510,32 +466,41 @@ const key =
           const res = await axios.post("http://localhost:5000/api/entries", entry);
           if (res.data.success) {
             newEntries.push({ ...entry, id: res.data.entryId });
-            newClosing[catKey] = {
-              value: cl2,
-              updatedAt: new Date().toISOString(),
-              date,
-              updatedBy: currentSite,
-            };
+            newClosing[catKey] = { value: cl2, updatedAt: new Date().toISOString(), date, updatedBy: currentSite };
 
             await axios.post("http://localhost:5000/api/closing-balances", {
-              balanceKey: catKey,
-              value: cl2,
-              entryDate: date,
-              updatedBy: currentSite,
+              balanceKey: catKey, value: cl2, entryDate: date, updatedBy: currentSite,
             });
+
+            // ✅ Auto-create transit record if this row moved units
+            if (mov2 > 0) {
+  try {
+    const trRes = await axios.post("http://localhost:5000/api/transit-records", {
+      entryId: res.data.entryId,
+      fromSite: currentSite,
+      toSite: currentSite === "KHI" ? "LHE" : "KHI",
+      date,
+      quantity: mov2,
+      note: "Bulk import — auto transit",
+      status: "IN_TRANSIT",
+    });
+    setTransitRecords(p => [...p, {
+      id: trRes.data.id, entryId: res.data.entryId,
+      fromSite: currentSite, toSite: currentSite === "KHI" ? "LHE" : "KHI",
+      date, invType, cardType: row.cardType, scheme: row.scheme,
+      plasticCategory: row.plasticCategory, subProduct: row.subProduct, segment: segR,
+      quantity: mov2, note: "Bulk import — auto transit",
+      status: "IN_TRANSIT", createdAt: trRes.data.createdAt, deliveredAt: null,
+    }]);
+  } catch (err) {
+    console.error("Failed to save bulk transit record:", err.message);
+  }
+}
 
             saved++;
           }
         } catch (err) {
-          console.error("❌ SAVE FAILED for row:", {
-            subProduct: row.subProduct,
-            scheme: row.scheme,
-            plasticCategory: row.plasticCategory,
-            segment: segR,
-            batchNumber: row.batchNumber,
-            payload: entry,
-            error: err.response?.data || err.message,
-          });
+          console.error("❌ SAVE FAILED for row:", { subProduct: row.subProduct, error: err.response?.data || err.message });
           skipped++;
         }
       }
@@ -557,14 +522,14 @@ const key =
 
   return (
     <div>
-      {showTransit && pendingEntry && (
-        <TransitModal
-          qty={pendingEntry.movedToOtherSite} subProduct={pendingEntry.subProduct}
-          scheme={pendingEntry.scheme} segment={pendingEntry.segment}
-          onConfirm={note => { setShowTransit(false); doSave(pendingEntry, note); setPendingEntry(null); }}
-          onCancel={() => { setShowTransit(false); setPendingEntry(null); }}
-        />
-      )}
+     {showTransit && pendingEntry && (
+      <TransitModal
+        qty={pendingEntry.movedToOtherSite} subProduct={pendingEntry.subProduct}
+        scheme={pendingEntry.scheme} segment={pendingEntry.segment}
+        onConfirm={note => { setShowTransit(false); performSave(pendingEntry, note); setPendingEntry(null); }}
+        onCancel={() => { setShowTransit(false); setPendingEntry(null); }}
+      />
+    )}
 
       {/* ── Page header ── */}
       <div style={{ marginBottom: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>

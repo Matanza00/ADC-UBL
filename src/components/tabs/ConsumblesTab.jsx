@@ -34,131 +34,110 @@ const HEADERS = ["Item", "Yield/Unit", "Opening", "Consumed Today", "Closing", "
 
 export default function ConsumablesTab({ entries }) {
   const [openingStock, setOpeningStock] = useState(() => JSON.parse(localStorage.getItem("automated_opening_stock")) || Object.fromEntries(CONSUMABLES.map(i => [i.id, 5.0])));
-  
-  const normalizeDate = (d) => (typeof d === "string" ? d.slice(0, 10) : d);
+  const [baseDate, setBaseDate] = useState(() => localStorage.getItem("automated_opening_basedate") || null);
+  const [selectedDate, setSelectedDate] = useState(() => localStorage.getItem("automated_selected_date") || null);  const normalizeDate = (d) => (typeof d === "string" ? d.slice(0, 10) : d);
 
   const stateMatrix = useMemo(() => {
-    if (!entries?.length) {
-      return { 
-        date: "No Activity", 
-        runs: {}, 
-        avgRuns: {}, 
-        triggers: [], 
-        ribbonStatus: {}, 
-        closingStock: openingStock, 
-        tapeAlert: false, 
-        requiredTapeRolls: 0, 
-        hardwareAlerts: [] 
-      };
-    }
+  if (!entries?.length) {
+    return { 
+      date: "No Activity", runs: {}, avgRuns: {}, triggers: [], ribbonStatus: {}, 
+      closingStock: openingStock, tapeAlert: false, requiredTapeRolls: 0, hardwareAlerts: [] 
+    };
+  }
 
-    const normalizedEntries = entries.map(e => ({ ...e, date: normalizeDate(e.date) }));
-    const lastDate = [...normalizedEntries].sort((a, b) => b.date.localeCompare(a.date))[0].date;
-    const dayEntries = normalizedEntries.filter(e => e.date === lastDate);
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const uniqueDays = Math.max([...new Set(normalizedEntries.filter(e => e.date >= cutoff).map(e => e.date))].length, 1);
-    const recentEntries = normalizedEntries.filter(e => e.date >= cutoff);
+  const normalizedEntries = entries.map(e => ({ ...e, date: normalizeDate(e.date) }));
+  const sortedDates = [...new Set(normalizedEntries.map(e => e.date))].sort();
+  const latestDate = sortedDates[sortedDates.length - 1];
+  const lastDate = selectedDate || latestDate;
+
+  // Opening stock is valid as of baseDate. If never set, assume it's valid
+  // from before the earliest entry, so all historical consumption counts.
+  const effectiveBaseDate = baseDate || sortedDates[0];
+
+  const dayEntries = normalizedEntries.filter(e => e.date === lastDate);
+  // ✅ cumulative entries: everything AFTER baseDate up to and including the viewed date
+  const cumulativeEntries = normalizedEntries.filter(e => e.date > effectiveBaseDate && e.date <= lastDate);
+
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const uniqueDays = Math.max([...new Set(normalizedEntries.filter(e => e.date >= cutoff).map(e => e.date))].length, 1);
+  const recentEntries = normalizedEntries.filter(e => e.date >= cutoff);
+  
+  const runs = {};
+  const avgRuns = {};
+  const ribbonStatus = {};
+  const computedClosing = { ...openingStock };
+  const triggers = [];
+  const hardwareAlerts = [];
+  let grandTotalToday = 0;
+  let grandTotalCumulative = 0;
+  let grandTotalAvg = 0;
+
+  GROUPS.forEach(g => {
+    const match = e => g.cats.some(c => (e.plasticCategory || "").toUpperCase().includes(c.toUpperCase()));
     
-    const runs = {};
-    const avgRuns = {};
-    const ribbonStatus = {};
-    const computedClosing = { ...openingStock };
-    const triggers = [];
-    const hardwareAlerts = [];
-    let grandTotalToday = 0;
-    let grandTotalAvg = 0;
+    const todayVol = dayEntries.filter(match).reduce((s, e) => s + (Number(e.totalConsumption) || 0), 0);
+    // ✅ cumulative volume since baseDate — this is what actually depletes stock
+    const cumulativeVol = cumulativeEntries.filter(match).reduce((s, e) => s + (Number(e.totalConsumption) || 0), 0);
+    const avgDaily = recentEntries.filter(match).reduce((s, e) => s + (Number(e.totalConsumption) || 0), 0) / uniqueDays;
 
-    GROUPS.forEach(g => {
-      const match = e => g.cats.some(c => (e.plasticCategory || "").toUpperCase().includes(c.toUpperCase()));
-      
-      // Calculate volumes
-      const todayVol = dayEntries.filter(match).reduce((s, e) => s + (Number(e.totalConsumption) || 0), 0);
-      const avgDaily = recentEntries.filter(match).reduce((s, e) => s + (Number(e.totalConsumption) || 0), 0) / uniqueDays;
+    runs[g.id] = todayVol;
+    avgRuns[g.id] = avgDaily;
+    grandTotalToday += todayVol;
+    grandTotalCumulative += cumulativeVol;
+    grandTotalAvg += avgDaily;
 
-      runs[g.id] = todayVol;
-      avgRuns[g.id] = avgDaily;
-      grandTotalToday += todayVol;
-      grandTotalAvg += avgDaily;
-
-      g.ribbons.forEach(rb => {
-        const item = CONSUMABLES.find(i => i.id === rb.id);
-        if (!item) return;
-
-        const initialRolls = openingStock[rb.id] || 0;
-        const rollsConsumedToday = todayVol / item.yield;
-        const currentRemainingRolls = Math.max(0, initialRolls - rollsConsumedToday);
-        
-        computedClosing[rb.id] = currentRemainingRolls;
-        const cardsLeft = currentRemainingRolls * item.yield;
-        const daysLeft = avgDaily > 0 ? cardsLeft / avgDaily : null;
-
-        ribbonStatus[rb.id] = {
-          label: rb.label, 
-          group: g.label, 
-          opening: initialRolls, 
-          consumed: rollsConsumedToday, 
-          closing: currentRemainingRolls, 
-          cardsLeft, 
-          daysLeft,
-          ribbonsNeededFor30Days: avgDaily > 0 ? Math.ceil((avgDaily * 30) / item.yield) : 0,
-          critical: daysLeft !== null && daysLeft <= 3,
-          warning: daysLeft !== null && daysLeft > 3 && daysLeft <= 7,
-        };
-      });
-    });
-
-    runs["core"] = grandTotalToday;
-    avgRuns["core"] = grandTotalAvg;
-
-    CORE_GROUP.items.forEach(itemId => {
-      const item = CONSUMABLES.find(i => i.id === itemId);
+    g.ribbons.forEach(rb => {
+      const item = CONSUMABLES.find(i => i.id === rb.id);
       if (!item) return;
 
-      const initialUnits = openingStock[itemId] || 0;
-      const unitsConsumedToday = grandTotalToday / item.yield;
-      const currentRemainingUnits = Math.max(0, initialUnits - unitsConsumedToday);
+      const initialRolls = openingStock[rb.id] || 0;
+      const rollsConsumedCumulative = cumulativeVol / item.yield;
+      const currentRemainingRolls = Math.max(0, initialRolls - rollsConsumedCumulative);
       
-      computedClosing[itemId] = currentRemainingUnits;
-      const dailyUse = grandTotalAvg / item.yield;
-      const daysLeft = dailyUse > 0 ? currentRemainingUnits / dailyUse : null;
-      const cardsLeftOnCurrentPiece = (currentRemainingUnits - Math.floor(currentRemainingUnits)) * item.yield;
+      computedClosing[rb.id] = currentRemainingRolls;
+      const cardsLeft = currentRemainingRolls * item.yield;
+      const daysLeft = avgDaily > 0 ? cardsLeft / avgDaily : null;
 
-      if ((currentRemainingUnits > 0 && currentRemainingUnits < 0.1) || (grandTotalToday >= item.yield * 0.90)) {
-        hardwareAlerts.push({ 
-          id: itemId, 
-          desc: item.desc, 
-          remainingUnits: currentRemainingUnits, 
-          cardsLeftOnCurrentPiece: Math.max(0, cardsLeftOnCurrentPiece) 
-        });
-      }
-
-      if (daysLeft !== null && daysLeft <= 7) {
-        triggers.push({ 
-          id: itemId, 
-          desc: item.desc, 
-          opening: initialUnits, 
-          consumed: unitsConsumedToday, 
-          closing: currentRemainingUnits, 
-          daysLeft, 
-          dailyUse, 
-          needed30: dailyUse > 0 ? Math.ceil(dailyUse * 30) : 0, 
-          critical: daysLeft <= 3 
-        });
-      }
+      ribbonStatus[rb.id] = {
+        label: rb.label, group: g.label, opening: initialRolls, 
+        consumed: rollsConsumedCumulative, closing: currentRemainingRolls, cardsLeft, daysLeft,
+        ribbonsNeededFor30Days: avgDaily > 0 ? Math.ceil((avgDaily * 30) / item.yield) : 0,
+        critical: daysLeft !== null && daysLeft <= 3,
+        warning: daysLeft !== null && daysLeft > 3 && daysLeft <= 7,
+      };
     });
+  });
 
-    return { 
-      date: lastDate, 
-      runs, 
-      avgRuns, 
-      triggers, 
-      ribbonStatus, 
-      closingStock: computedClosing, 
-      tapeAlert: grandTotalToday >= 23000, 
-      requiredTapeRolls: Math.max(1, Math.floor(grandTotalToday / 23000)), 
-      hardwareAlerts 
-    };
-  }, [entries, openingStock]);
+  runs["core"] = grandTotalToday;
+  avgRuns["core"] = grandTotalAvg;
+
+  CORE_GROUP.items.forEach(itemId => {
+    const item = CONSUMABLES.find(i => i.id === itemId);
+    if (!item) return;
+
+    const initialUnits = openingStock[itemId] || 0;
+    const unitsConsumedCumulative = grandTotalCumulative / item.yield;
+    const currentRemainingUnits = Math.max(0, initialUnits - unitsConsumedCumulative);
+    
+    computedClosing[itemId] = currentRemainingUnits;
+    const dailyUse = grandTotalAvg / item.yield;
+    const daysLeft = dailyUse > 0 ? currentRemainingUnits / dailyUse : null;
+    const cardsLeftOnCurrentPiece = (currentRemainingUnits - Math.floor(currentRemainingUnits)) * item.yield;
+
+    if ((currentRemainingUnits > 0 && currentRemainingUnits < 0.1) || (grandTotalToday >= item.yield * 0.90)) {
+      hardwareAlerts.push({ id: itemId, desc: item.desc, remainingUnits: currentRemainingUnits, cardsLeftOnCurrentPiece: Math.max(0, cardsLeftOnCurrentPiece) });
+    }
+    if (daysLeft !== null && daysLeft <= 7) {
+      triggers.push({ id: itemId, desc: item.desc, opening: initialUnits, consumed: unitsConsumedCumulative, closing: currentRemainingUnits, daysLeft, dailyUse, needed30: dailyUse > 0 ? Math.ceil(dailyUse * 30) : 0, critical: daysLeft <= 3 });
+    }
+  });
+
+  return { 
+    date: lastDate, runs, avgRuns, triggers, ribbonStatus, closingStock: computedClosing, 
+    tapeAlert: grandTotalToday >= 23000, requiredTapeRolls: Math.max(1, Math.floor(grandTotalToday / 23000)), 
+    hardwareAlerts 
+  };
+}, [entries, openingStock, selectedDate, baseDate]);
 
   const consumablesExportRows = useMemo(() => {
     const rows = [];
@@ -200,16 +179,22 @@ export default function ConsumablesTab({ entries }) {
   }, [consumablesExportRows, stateMatrix.date]);
 
   const handleOpeningChange = (id, val) => {
-    const updated = { ...openingStock, [id]: Math.max(0, Number(val) || 0) };
-    setOpeningStock(updated);
-    localStorage.setItem("automated_opening_stock", JSON.stringify(updated));
-  };
+  const updated = { ...openingStock, [id]: Math.max(0, Number(val) || 0) };
+  setOpeningStock(updated);
+  localStorage.setItem("automated_opening_stock", JSON.stringify(updated));
+  const newBase = selectedDate || stateMatrix.date;
+  setBaseDate(newBase);
+  localStorage.setItem("automated_opening_basedate", newBase);
+};
 
   const commitShift = () => {
-    setOpeningStock(stateMatrix.closingStock);
-    localStorage.setItem("automated_opening_stock", JSON.stringify(stateMatrix.closingStock));
-    alert("Shift committed successfully!");
-  };
+  if (!window.confirm(`Reset baseline? This locks in ${stateMatrix.date}'s computed closing as the new opening reference point.`)) return;
+  setOpeningStock(stateMatrix.closingStock);
+  setBaseDate(stateMatrix.date);
+  localStorage.setItem("automated_opening_stock", JSON.stringify(stateMatrix.closingStock));
+  localStorage.setItem("automated_opening_basedate", stateMatrix.date);
+  alert("Baseline reset successfully!");
+};
 
   const summaryCards = useMemo(() => {
     const getAgg = (ids) => {
@@ -268,6 +253,29 @@ export default function ConsumablesTab({ entries }) {
           </div>
         </div>
       </div>
+      <div style={{ background: "#f1f5f9", padding: "8px 16px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10 }}>
+  <div>
+    <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Viewing Date</span>
+    <div style={{ fontSize: 14, fontWeight: 700, color: "#1e3a8a", fontFamily: "monospace" }}>{stateMatrix.date}</div>
+  </div>
+  <input
+  type="date"
+  value={selectedDate || stateMatrix.date}
+  onChange={e => {
+    setSelectedDate(e.target.value);
+    localStorage.setItem("automated_selected_date", e.target.value);
+  }}
+  style={{ height: 32, border: "1px solid #cbd5e1", borderRadius: 6, padding: "0 8px", fontSize: 12, fontFamily: "monospace" }}
+/>
+  {selectedDate && (
+  <button onClick={() => {
+    setSelectedDate(null);
+    localStorage.removeItem("automated_selected_date");
+  }} style={{ height: 32, padding: "0 10px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#64748b" }}>
+    ↺ Latest
+  </button>
+)}
+</div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 24 }}>
         {[

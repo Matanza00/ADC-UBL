@@ -34,12 +34,11 @@ export default function ForecastTab({ entries, closing, currentSite, orders = {}
   const [search, setSearch] = useState("");
   const [openOrder, setOpenOrder] = useState(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
+  const [siteView, setSiteView] = useState("ALL"); // "ALL" | "KHI" | "LHE"
 
   const todayStr = today();
   const safeOrders = useMemo(() => orders || {}, [orders]);
-  const forecast = useMemo(() => buildForecast(entries, closing, safeOrders), [entries, closing, safeOrders]);
-
-  const activeAlerts = useMemo(() =>
+const forecast = useMemo(() => buildForecast(entries, closing, safeOrders, siteView === "ALL" ? null : siteView), [entries, closing, safeOrders, siteView]);  const activeAlerts = useMemo(() =>
     forecast.filter(r => {
       const ord = safeOrders[r.key];
       return (r.status === "CRITICAL" || r.status === "WARNING") && !(ord?.placedAt || ord?.received);
@@ -198,10 +197,18 @@ export default function ForecastTab({ entries, closing, currentSite, orders = {}
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>Forecasting</h1>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={downloadForecastCSV} style={{ ...btnBase, background: C.green }}>⬇ CSV</button>
-            <button onClick={downloadForecastPDF} style={{ ...btnBase, background: C.red }}>⬇ PDF</button>
-          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+  <div style={{ display: "flex", border: `1.5px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+    {["ALL", "KHI", "LHE"].map(s => (
+      <button key={s} onClick={() => setSiteView(s)}
+        style={{ height: 34, padding: "0 14px", border: "none", background: siteView === s ? C.blue : "#fff", color: siteView === s ? "#fff" : C.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+        {s === "ALL" ? "Both Sites" : s}
+      </button>
+    ))}
+  </div>
+  <button onClick={downloadForecastCSV} style={{ ...btnBase, background: C.green }}>⬇ CSV</button>
+  <button onClick={downloadForecastPDF} style={{ ...btnBase, background: C.red }}>⬇ PDF</button>
+</div>
         </div>
         <SharedSyncBanner currentSite={currentSite} />
         {Object.entries(safeOrders).filter(([, o]) => o.placedAt && !o.received).map(([key, o]) => {
@@ -237,10 +244,18 @@ export default function ForecastTab({ entries, closing, currentSite, orders = {}
           <p style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>Lead: 84d · Safety buffer: 180d · Alert threshold: {ALERT_DAYS}d</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={downloadForecastCSV} style={{ ...btnBase, background: C.green }}>⬇ CSV</button>
-            <button onClick={downloadForecastPDF} style={{ ...btnBase, background: C.red }}>⬇ PDF</button>
-          </div>
+  <div style={{ display: "flex", border: `1.5px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+    {["ALL", "KHI", "LHE"].map(s => (
+      <button key={s} onClick={() => setSiteView(s)}
+        style={{ height: 34, padding: "0 14px", border: "none", background: siteView === s ? C.blue : "#fff", color: siteView === s ? "#fff" : C.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+        {s === "ALL" ? "Both Sites" : s}
+      </button>
+    ))}
+  </div>
+  <div style={{ display: "flex", gap: 8 }}>
+    <button onClick={downloadForecastCSV} style={{ ...btnBase, background: C.green }}>⬇ CSV</button>
+    <button onClick={downloadForecastPDF} style={{ ...btnBase, background: C.red }}>⬇ PDF</button>
+  </div>
           {[
             ["⏱ Lead Time", "84 days", C.blueLight, C.blue],
             ["🛡 Safety Buffer", "180 days", C.greenLight, C.green],

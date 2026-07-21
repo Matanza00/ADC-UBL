@@ -30,20 +30,17 @@ router.post("/", async (req, res) => {
 // GET all closing balances → returned as { [balanceKey]: {...} } to match your `closing` object shape
 router.get("/", async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM closing_balances");
+    const [rows] = await db.query(
+      "SELECT * FROM closing_balances ORDER BY updated_at ASC, id ASC"
+    );
     const asObject = {};
     rows.forEach(r => {
       asObject[r.balance_key] = {
-        value: r.value,
-        updatedAt: r.updated_at,
-        date: r.entry_date,
-        updatedBy: r.updated_by,
+        value: r.value, updatedAt: r.updated_at, date: r.entry_date, updatedBy: r.updated_by,
       };
     });
     res.json(asObject);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // DELETE all balances for a given invType prefix (used by Reset All)

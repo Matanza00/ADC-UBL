@@ -9,6 +9,7 @@ export const today = () => {
 };
 export const ckp = (ct, sc, cat, sub, invType="PLASTIC") => `${invType}|${ct}|${sc}|${cat}|${sub}`;
 export const ckCat = (ct, sc, cat, invType="PLASTIC") => `${invType}|${ct}|${sc}|${cat}`;
+export const ckCatSite = (ct, sc, cat, invType, site) => `${site}|${invType}|${ct}|${sc}|${cat}`;
 export const fmt = n => Number(n||0).toLocaleString();
 export const fmtDate = (dateStr) => {
   if (!dateStr) return "—";

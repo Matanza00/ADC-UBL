@@ -88,6 +88,28 @@ export default function HistoryTab({ allEntries, setAllEntries, toast, transitRe
       return { ...p, total: consumptions.reduce((a, b) => a + b, 0), avgAll: getAvg(), avg30: getAvg(30), avg90: getAvg(90), highest: Math.max(...consumptions, 0), lowest: consumptions.length ? Math.min(...consumptions) : 0 };
     }).sort((a, b) => a.product.localeCompare(b.product));
   }, [allEntries]);
+  // Recompute each entry's Opening Balance as the previous entry's Closing Balance
+// for that same product — instead of trusting whatever was stored on save.
+const displayOpening = useMemo(() => {
+  const map = {};
+  const byProduct = {};
+
+  allEntries.forEach(e => {
+    const key = `${e.invType}|${e.cardType}|${e.scheme}|${e.plasticCategory}|${e.subProduct || e.pageSize}|${e.segment}`;
+    if (!byProduct[key]) byProduct[key] = [];
+    byProduct[key].push(e);
+  });
+
+  Object.values(byProduct).forEach(rows => {
+    // sort chronologically: oldest first, so we can chain closing → next opening
+    const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    sorted.forEach((e, idx) => {
+      map[e.id] = idx === 0 ? e.openingBalance : sorted[idx - 1].closingBalance;
+    });
+  });
+
+  return map;
+}, [allEntries]);
 
   useEffect(() => {
     if (productAnalytics.length && !selectedProduct) setSelectedProduct(productAnalytics[0].key);
@@ -295,7 +317,7 @@ export default function HistoryTab({ allEntries, setAllEntries, toast, transitRe
                           </div>
                         )}
                       </td>
-                      {[e.openingBalance, e.receivedFromVendor, e.totalConsumption,e.extraCount, e.damaged, e.movedToOtherSite].map((v, j) => (
+                      {[displayOpening[e.id], e.receivedFromVendor, e.totalConsumption, e.extraCount, e.damaged, e.movedToOtherSite].map((v, j) => (
                         <td key={`${e.id}-col-${j}`} style={{ padding: "9px 12px", textAlign: "right", fontFamily: "monospace", fontWeight: 600, color: j === 1 ? C.green : j === 3 ? C.amber : C.text }}>{fmt(v)}</td>
                       ))}
 
