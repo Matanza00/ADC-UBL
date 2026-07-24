@@ -15,6 +15,8 @@ app.use("/api/entries", entryRoutes);
 app.use("/api/closing-balances", closingBalanceRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/transit-records", require("./routes/transitRecords"));
+app.use("/api/consumables-stock", require("./routes/consumables"));
+
 app.listen(5000, () => {
   console.log("✅ Server running on port 5000");
 });

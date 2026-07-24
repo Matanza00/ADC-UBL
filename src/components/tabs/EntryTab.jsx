@@ -281,6 +281,12 @@ export default function EntryTab({
 
   const performSave = async (entry, transitNote) => {
     try {
+      if (entry.closingBalance < 0) {
+  const proceed = window.confirm(
+    `Warning: this entry would produce a NEGATIVE closing balance (${entry.closingBalance}) for ${entry.subProduct || entry.plasticCategory}.\n\nThis usually means more was consumed/moved than what's actually in stock. Proceed anyway?`
+  );
+  if (!proceed) return;
+}
       const res = await axios.post("http://localhost:5000/api/entries", entry);
       if (!res.data.success) return;
 
@@ -397,6 +403,13 @@ if (existing) {
         const mergedClosing = existing.openingBalance + mergedReceived - mergedConsumed - mergedDamaged - mergedMoved;
 
         try {
+          if (mergedClosing < 0) {
+  const proceed = window.confirm(
+    `Bulk-merge for ${row.subProduct} would produce a NEGATIVE closing balance (${mergedClosing}). Skip this row?`
+  );
+  if (!proceed) { skipped++; continue; }
+} 
+          
           const res = await axios.put(`http://localhost:5000/api/entries/${existing.id}`, {
             receivedFromVendor: mergedReceived, batchCount: mergedConsumed, totalConsumption: mergedConsumed,
             extraCount: mergedExtra, damaged: mergedDamaged, movedToOtherSite: mergedMoved, closingBalance: mergedClosing,
