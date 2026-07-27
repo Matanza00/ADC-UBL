@@ -1,14 +1,48 @@
 import { C } from "../../constants/color";
 import { SITE_USERS } from "../../constants/catalog";
-import { fmt, fmtDate, fmtTime, today, ckp, ckCat } from "../../utils/helper";
+import { fmt, fmtDate, fmtTime, today, ckp, ckCat, ckCatSite } from "../../utils/helper";
 import { Card } from "../ui/Card";
 import { Pill } from "../ui/Pill";
 import SharedSyncBanner from "../layout/SharedSyncBanner";
+import { useEffect } from "react";
+import axios from "axios";
 
-export default function TransitTab({ currentSite, transitRecords, setTransitRecords, toast, showAlert, setClosing, closing }) {
+export default function TransitTab({ currentSite, transitRecords, setTransitRecords, toast, showAlert, setClosing, closing, allEntries, setAllEntries }) {
   const siteRecords = transitRecords.filter(r => r.fromSite === currentSite || r.toSite === currentSite);
-  const inTransit   = siteRecords.filter(r => r.status === "IN_TRANSIT");
-  const delivered   = siteRecords.filter(r => r.status === "DELIVERED");
+  const inTransit = siteRecords.filter(r => r.status === "IN_TRANSIT");
+  const delivered = siteRecords.filter(r => r.status === "DELIVERED");
+
+  useEffect(() => {
+    const fetchTransit = async () => {
+      try {
+        const res = await axios.get("http://localhost:5000/api/transit-records");
+        const normalized = res.data.map(r => ({
+          id: r.id,
+          entryId: r.entry_id,
+          fromSite: r.from_site,
+          toSite: r.to_site,
+          date: r.date,
+          invType: r.inv_type,
+          cardType: r.card_type,
+          scheme: r.mailer_scheme || r.scheme,
+          plasticCategory: r.mailer_plastic_category || r.plastic_category,
+          subProduct: r.plastic_sub_product || r.mailer_sub_product,
+          pageSize: r.page_size,
+          segment: r.segment,
+          batchNumber: r.batch_number,
+          quantity: r.quantity,
+          note: r.note,
+          status: r.status,
+          createdAt: r.created_at,
+          deliveredAt: r.delivered_at,
+        }));
+        setTransitRecords(normalized);
+      } catch (err) {
+        console.error("Failed to fetch transit records:", err.message);
+      }
+    };
+    fetchTransit();
+  }, []);
 
   const markDelivered = (record) => {
     showAlert({
@@ -18,18 +52,35 @@ export default function TransitTab({ currentSite, transitRecords, setTransitReco
         { label: "Cancel", type: "secondary" },
         {
           label: "✅ Yes, Delivered", type: "primary", color: C.green,
-          onClick: () => {
+          onClick: async () => {
+            try {
+              await axios.put(`http://localhost:5000/api/transit-records/${record.id}/deliver`);
+            } catch (err) {
+              toast("Failed to update transit status: " + err.message, "error");
+              return;
+            }
             setTransitRecords(transitRecords.map(r =>
               r.id === record.id ? { ...r, status: "DELIVERED", deliveredAt: new Date().toISOString() } : r
             ));
-            const subKey = ckp(record.cardType, record.scheme, record.plasticCategory, record.subProduct, record.invType || "PLASTIC");
-            const catKey = ckCat(record.cardType, record.scheme, record.plasticCategory, record.invType || "PLASTIC");
-            const existing = closing[subKey] || closing[catKey] || { value: 0 };
-            const newVal = (existing.value || 0) + record.quantity;
+
+            const catKey = ckCatSite(record.cardType, record.scheme, record.plasticCategory, record.invType || "PLASTIC", record.toSite);
+            const existingBal = closing[catKey] || { value: 0 };
+            const openingAtDest = existingBal.value || 0;
+            const newVal = openingAtDest + record.quantity;
+
             setClosing(prev => ({
               ...prev,
-              [subKey]: { value: newVal, updatedAt: new Date().toISOString(), date: today(), updatedBy: "LHE_DELIVERY" }
+              [catKey]: { value: newVal, updatedAt: new Date().toISOString(), date: today(), updatedBy: record.toSite === "LHE" ? "LHE_DELIVERY" : "KHI_DELIVERY" }
             }));
+
+            try {
+              await axios.post("http://localhost:5000/api/closing-balances", {
+                balanceKey: catKey, value: newVal, entryDate: today(), updatedBy: record.toSite === "LHE" ? "LHE_DELIVERY" : "KHI_DELIVERY",
+              });
+            } catch (err) {
+              console.error("Failed to persist delivered balance:", err.message);
+            }
+
             toast(`✅ ${fmt(record.quantity)} units delivered — balance updated to ${fmt(newVal)}.`, "success");
           }
         }
